@@ -5,9 +5,15 @@ from decode_can_code import reqest1
 import os
 import json
 from flask import request
-
+from create_table import *
 # from flask.ext.sq
-
+from sqlalchemy import *
+from sqlalchemy.orm import mapper
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+import datetime
+from sqlalchemy.orm import column_property
 
 app = Flask(__name__, static_url_path="", static_folder='static')
 app._static_folder = os.path.abspath("static")
@@ -86,18 +92,26 @@ test5 = [
 text = '{"canApprove": true,"hasDisplayed": false}'
 
 
-@app.route('/getbarcode/', methods=['GET', 'POST'])
+@app.route('/getbarcode/', methods=['GET', 'POST'])   ###!!!!  запросы на поиск товара для продажи, !!!!
 def getBarcode():
-    print("respons")
-    S = str(test5)
     if request.method == 'GET':
-        # print("this is reqest",json.loads(request.args))
-        print("this is reqest", request.args)
         if "barcode" in request.args:
-            print("its barcode")
             data = request.args.get('barcode')
-            print(test5[int(data)])
-            return jsonify(test5[int(data)])
+
+            NameOrBarcode = session.query(GoodInRealization, Goods).filter(or_(GoodInRealization.id== data, Goods.barcode == data, Goods.name.like("%" + data + "%") )).all()
+            #NameOrBarcode = session.query(GoodInRealization, Goods ).filter((GoodInRealization.id== data) | (Goods.barcode == data)  | (Goods.name.like("%" + data + "%"))).all()
+            print(" its oll return!! ", NameOrBarcode)
+            for i in NameOrBarcode:
+                print("its for ! ",i[0].id)
+            a = [{
+                "id": NameOrBarcode[1][0].id,
+                "name": NameOrBarcode[1][1].name,
+                "price": 100,
+                "quantity": NameOrBarcode[1][0].quantity_realization,
+                "total_amount": NameOrBarcode[1][0].quantity_realization
+            }]
+            print(a)
+            return jsonify(a[0])
     elif request.method == 'POST':
         print("its mass", request.get_json(force=True))
         return "xyz", 200
@@ -111,28 +125,69 @@ def getBarcode():
         # print(test5[int(data)])
         # #return render_template("add_t.html", barcode=data)
         # return jsonify(test5[int(data)])
-
-
-@app.route('/hello')
-def hello_world():
-    return 'Hello World2!'
-
+def dict_from_class(cls):
+     return dict(
+         (key, value)
+         for (key, value) in cls.__dict__.items()
+         if key not in _excluded_keys
+         )
 @app.route('/findbarcode/', methods=['GET', 'POST'])
 def findBarcode():
-    print("respons")
-    S = str(test5)
     if request.method == 'GET':
-        # print("this is reqest",json.loads(request.args))
-        print("this is reqest", request.args)
         if "barcode" in request.args:
-            print("its barcode")
             data = request.args.get('barcode')
-            print("this print ",data)
-            #print(test5[int(data)])
-            #reqest = reqest1(data)
-            otvet = {"status":200,"names":["СИГАРЕТЫ KENT 4 (СМОЛ 4МГ\/С)"]}
-            #return "xyz", 200
-            return jsonify(otvet)
+
+            query1 = session.query(Goods).filter((Goods.name.like("%" + data + "%")) | (Goods.barcode == (data)) | (Goods.id == (data))).all()
+            #print(dict(query1))
+            if not query1 :
+                reqest = reqest1(data) #////zapros na sayt rozkomentit!!!!!!!!!!!!!!!!!!!
+                da = json.loads(reqest)
+                #print(da['names'][0])#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                if da['status'] == 404:
+                    print("not found")
+                    return "xyz", 404
+                newGood = Goods(da['names'][0],data)
+                session.add(newGood)
+                b = newGood.__dict__
+                c = dict(b)
+                del c["_sa_instance_state"]
+                session.commit()
+                d={}
+                d[1] = c
+                return jsonify(d)
+            else:
+                print("find in the base ", query1)
+            print("this is test analized!!!!! ", query1)
+            c = query1[0].__dict__
+            print (c)
+            print(type(query1[0]))
+            i=0
+            d= {}
+            for key in query1:
+                
+                print ("key  ",key)
+                print(type(key))
+                i=i+1
+                print(i)
+                key.__delattr__("_sa_instance_state")
+                d[i] = key.__dict__
+            print(d)    
+            #reqest = reqest1(data) ////zapros na sayt rozkomentit!!!!!!!!!!!!!!!!!!!
+            #otvet = {"status":200,"names":["СИГАРЕТЫ KENT 4 (СМОЛ 4МГ\/С)"]}
+            #print(reqest)
+            #print("this json",jsonify(reqest))
+            
+            # print("convert!!!",my_dict)
+            # print(type(my_dict))
+            # #print("111111111", my_dict[0])
+            # print("222222222222",my_dict)
+            
+            #print("dir    !!!!!!!!!!!!",query1.__dir__)
+           # print("dict                ",query1.__dict__)
+            #print(query1.__list__)
+            #query2 = query1.__slots__
+            print((jsonify(d)))
+            return jsonify(d)
     elif request.method == 'POST':
         print("its mass", request.get_json(force=True))
         return "xyz", 200    
